@@ -5,7 +5,6 @@ chcp 1251 >nul
 set "SCRIPT_DIR=%~dp0"
 set "CFG_FILE=%SCRIPT_DIR%run_uploader.cfg"
 set "TMP_HTTP=%TEMP%\nexus_http_%RANDOM%_%RANDOM%.tmp"
-set "TMP_ERR=%TEMP%\nexus_err_%RANDOM%_%RANDOM%.tmp"
 
 set "REPO_URL="
 set "REPO_PATH="
@@ -122,13 +121,12 @@ call :log INFO "Этап 1/2: DELETE предыдущего файла..."
 
 call :log INFO "Шаг 6: отправка DELETE запроса."
 set "DEL_CODE="
-curl %CURL_SSL_ARG% -sS -o NUL -w "%%{http_code}" -u "%NEXUS_USER%:%NEXUS_PASS%" -X DELETE "%ARTIFACT_URL%" 1>"%TMP_HTTP%" 2>"%TMP_ERR%"
+curl %CURL_SSL_ARG% --progress-bar -o NUL -w "%%{http_code}" -u "%NEXUS_USER%:%NEXUS_PASS%" -X DELETE "%ARTIFACT_URL%" 1>"%TMP_HTTP%"
 set "CURL_EXIT=%ERRORLEVEL%"
 if exist "%TMP_HTTP%" set /p "DEL_CODE="<"%TMP_HTTP%"
 if "%DEL_CODE%"=="" set "DEL_CODE=000"
 if not "%CURL_EXIT%"=="0" (
     call :log WARN "curl на DELETE завершился с кодом %CURL_EXIT%."
-    call :print_err_file
 )
 call :log INFO "Шаг 7: DELETE завершен с HTTP %DEL_CODE%."
 
@@ -161,13 +159,12 @@ if "%DEL_CODE%"=="403" (
 call :log INFO "Этап 2/2: UPLOAD нового файла..."
 call :log INFO "Шаг 8: отправка UPLOAD запроса."
 set "UP_CODE="
-curl %CURL_SSL_ARG% -sS -o NUL -w "%%{http_code}" -u "%NEXUS_USER%:%NEXUS_PASS%" --upload-file "%FILE_PATH%" "%ARTIFACT_URL%" 1>"%TMP_HTTP%" 2>"%TMP_ERR%"
+curl %CURL_SSL_ARG% --progress-bar -o NUL -w "%%{http_code}" -u "%NEXUS_USER%:%NEXUS_PASS%" --upload-file "%FILE_PATH%" "%ARTIFACT_URL%" 1>"%TMP_HTTP%"
 set "CURL_EXIT=%ERRORLEVEL%"
 if exist "%TMP_HTTP%" set /p "UP_CODE="<"%TMP_HTTP%"
 if "%UP_CODE%"=="" set "UP_CODE=000"
 if not "%CURL_EXIT%"=="0" (
     call :log WARN "curl на UPLOAD завершился с кодом %CURL_EXIT%."
-    call :print_err_file
 )
 call :log INFO "Шаг 9: UPLOAD завершен с HTTP %UP_CODE%."
 
@@ -207,17 +204,8 @@ if not "%CONTINUE_ON_DELETE_403_404%"=="1" set "CONTINUE_ON_DELETE_403_404=0"
 if not "%CURL_INSECURE%"=="1" set "CURL_INSECURE=0"
 goto :eof
 
-:print_err_file
-if exist "%TMP_ERR%" (
-    for /f "usebackq delims=" %%E in ("%TMP_ERR%") do (
-        if not "%%E"=="" call :log WARN "curl stderr: %%E"
-    )
-)
-goto :eof
-
 :cleanup_tmp
 if exist "%TMP_HTTP%" del /q "%TMP_HTTP%" >nul 2>nul
-if exist "%TMP_ERR%" del /q "%TMP_ERR%" >nul 2>nul
 goto :eof
 
 :trim_trailing_slash
