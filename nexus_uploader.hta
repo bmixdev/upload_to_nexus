@@ -1,5 +1,6 @@
 <html>
 <head>
+  <meta http-equiv="Content-Type" content="text/html; charset=windows-1251" />
   <meta http-equiv="x-ua-compatible" content="IE=9" />
   <title>Nexus Raw Uploader</title>
   <HTA:APPLICATION
@@ -63,13 +64,48 @@
 
     function runPsAndCapture(psScript) {
       var shell = new ActiveXObject("WScript.Shell");
-      var encoded = psScript.replace(/"/g, '""');
-      var cmd = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "' + encoded + '"';
+      var wrapped = "[Console]::InputEncoding=[Text.Encoding]::GetEncoding(1251);" +
+                    "[Console]::OutputEncoding=[Text.Encoding]::GetEncoding(1251);" +
+                    "$OutputEncoding=[Text.Encoding]::GetEncoding(1251);" +
+                    psScript;
+      var utf16le = unescape(encodeURIComponent(wrapped));
+      var i, bytes = [];
+      for (i = 0; i < utf16le.length; i++) {
+        var c = utf16le.charCodeAt(i);
+        bytes.push(c & 0xFF);
+        bytes.push((c >> 8) & 0xFF);
+      }
+      var b64 = base64FromBytes(bytes);
+      var cmd = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand ' + b64;
       var exec = shell.Exec(cmd);
       var out = exec.StdOut.ReadAll();
       var err = exec.StdErr.ReadAll();
       var code = exec.ExitCode;
       return { exitCode: code, stdout: out, stderr: err };
+    }
+
+    function base64FromBytes(bytes) {
+      var table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+      var result = "";
+      var i;
+
+      for (i = 0; i < bytes.length; i += 3) {
+        var b1 = bytes[i];
+        var b2 = (i + 1 < bytes.length) ? bytes[i + 1] : NaN;
+        var b3 = (i + 2 < bytes.length) ? bytes[i + 2] : NaN;
+
+        var c1 = b1 >> 2;
+        var c2 = ((b1 & 3) << 4) | (isNaN(b2) ? 0 : (b2 >> 4));
+        var c3 = isNaN(b2) ? 64 : (((b2 & 15) << 2) | (isNaN(b3) ? 0 : (b3 >> 6)));
+        var c4 = isNaN(b3) ? 64 : (b3 & 63);
+
+        result += table.charAt(c1);
+        result += table.charAt(c2);
+        result += (c3 === 64 ? "=" : table.charAt(c3));
+        result += (c4 === 64 ? "=" : table.charAt(c4));
+      }
+
+      return result;
     }
 
     function pickFile() {
@@ -108,7 +144,8 @@
         "$user='" + escapePsSingleQuoted(user) + "';" +
         "$pass='" + escapePsSingleQuoted(pass) + "';" +
         "$pair = '{0}:{1}' -f $user,$pass;" +
-        "$token=[Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($pair));" +
+        "$enc=[Text.Encoding]::GetEncoding(1251);" +
+        "$token=[Convert]::ToBase64String($enc.GetBytes($pair));" +
         "$headers=@{ Authorization = 'Basic ' + $token };" +
         "$code=-1; $msg='';" +
         "try {" +
@@ -133,7 +170,8 @@
         "$file='" + escapePsSingleQuoted(filePath) + "';" +
         "if (-not (Test-Path -LiteralPath $file)) { throw 'Файл не найден: ' + $file }" +
         "$pair = '{0}:{1}' -f $user,$pass;" +
-        "$token=[Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($pair));" +
+        "$enc=[Text.Encoding]::GetEncoding(1251);" +
+        "$token=[Convert]::ToBase64String($enc.GetBytes($pair));" +
         "$headers=@{ Authorization = 'Basic ' + $token };" +
         "$code=-1; $msg='';" +
         "try {" +
@@ -187,7 +225,7 @@
       var delCode = Number(delInfo.code);
       if (delCode >= 200 && delCode < 300) {
         logLine("DELETE успешно, HTTP " + delCode + ".");
-      } else if (delCode === 403 || delCode === 404) {
+      } else if (delCode === 403 || delCode === 404 || delCode === 405) {
         logLine("DELETE вернул HTTP " + delCode + ", продолжаем загрузку по правилу.");
       } else {
         logLine("ОШИБКА DELETE, HTTP " + delCode + ". Операция остановлена. Сообщение: " + delInfo.message);
@@ -257,4 +295,3 @@
   </div>
 </body>
 </html>
-
