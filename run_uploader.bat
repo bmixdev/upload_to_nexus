@@ -23,7 +23,7 @@ if errorlevel 1 (
     echo [ОШИБКА] Утилита curl не найдена в PATH.
     echo Установите curl или используйте Windows 11 с доступным curl.exe.
     call :cleanup_tmp
-    exit /b 1
+    call :finish 1
 )
 call :log INFO "Шаг 2: проверка curl выполнена."
 
@@ -45,7 +45,7 @@ if "%REPO_URL%"=="" (
 if "%REPO_URL%"=="" (
     echo [ОШИБКА] Не заполнен URL репозитория.
     call :cleanup_tmp
-    exit /b 1
+    call :finish 1
 )
 
 if "%REPO_PATH%"=="" (
@@ -62,12 +62,12 @@ if "%FILE_PATH%"=="" (
 if "%FILE_PATH%"=="" (
     echo [ОШИБКА] Не заполнен путь к файлу.
     call :cleanup_tmp
-    exit /b 1
+    call :finish 1
 )
 if not exist "%FILE_PATH%" (
     echo [ОШИБКА] Файл не найден: "%FILE_PATH%"
     call :cleanup_tmp
-    exit /b 1
+    call :finish 1
 )
 
 if "%NEXUS_USER%"=="" (
@@ -78,7 +78,7 @@ if "%NEXUS_USER%"=="" (
 if "%NEXUS_USER%"=="" (
     echo [ОШИБКА] Не заполнен пользователь Nexus.
     call :cleanup_tmp
-    exit /b 1
+    call :finish 1
 )
 
 if "%NEXUS_PASS%"=="" (
@@ -90,7 +90,7 @@ if "%NEXUS_PASS%"=="" (
 if "%NEXUS_PASS%"=="" (
     echo [ОШИБКА] Не заполнен пароль Nexus.
     call :cleanup_tmp
-    exit /b 1
+    call :finish 1
 )
 
 call :log INFO "Шаг 4: входные параметры получены и проверены."
@@ -104,7 +104,7 @@ for %%F in ("%FILE_PATH%") do set "FILE_NAME=%%~nxF"
 if "%FILE_NAME%"=="" (
     echo [ОШИБКА] Не удалось определить имя файла.
     call :cleanup_tmp
-    exit /b 1
+    call :finish 1
 )
 
 call :trim_trailing_slash REPO_URL
@@ -138,7 +138,7 @@ if "%DEL_CODE%"=="403" (
     ) else (
         call :log ERROR "DELETE вернул HTTP 403, продолжение отключено в cfg. Операция остановлена."
         call :cleanup_tmp
-        exit /b 1
+        call :finish 1
     )
 ) else if "%DEL_CODE%"=="404" (
     if "%CONTINUE_ON_DELETE_403_404%"=="1" (
@@ -146,14 +146,14 @@ if "%DEL_CODE%"=="403" (
     ) else (
         call :log ERROR "DELETE вернул HTTP 404, продолжение отключено в cfg. Операция остановлена."
         call :cleanup_tmp
-        exit /b 1
+        call :finish 1
     )
 ) else (
     call :is_2xx "%DEL_CODE%"
     if errorlevel 1 (
         call :log ERROR "DELETE завершился ошибкой HTTP %DEL_CODE%. Операция остановлена."
         call :cleanup_tmp
-        exit /b 1
+        call :finish 1
     )
     call :log INFO "DELETE выполнен успешно, HTTP %DEL_CODE%."
 )
@@ -175,13 +175,13 @@ call :is_2xx "%UP_CODE%"
 if errorlevel 1 (
     call :log ERROR "UPLOAD завершился ошибкой HTTP %UP_CODE%."
     call :cleanup_tmp
-    exit /b 1
+    call :finish 1
 )
 
 call :log INFO "UPLOAD успешно завершен, HTTP %UP_CODE%."
 call :log INFO "Готово."
 call :cleanup_tmp
-exit /b 0
+call :finish 0
 
 :load_cfg
 set "_cfg=%~1"
@@ -248,3 +248,10 @@ set "_lvl=%~1"
 set "_msg=%~2"
 echo [%date% %time:~0,8%] [%_lvl%] %_msg%
 goto :eof
+
+:finish
+set "_exit_code=%~1"
+echo.
+echo Нажмите любую клавишу для выхода...
+pause >nul
+exit /b %_exit_code%
