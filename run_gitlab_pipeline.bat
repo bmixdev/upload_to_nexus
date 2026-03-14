@@ -83,16 +83,16 @@ if /I "%AUTH_MODE%"=="TRIGGER" (
     set "API_URL=%GITLAB_URL%/api/v4/projects/%PROJECT_ID%/pipeline"
 )
 
-set "VAR_ARGS="
-call :build_var_args
+set "JSON_PAYLOAD="
+call :build_json_payload
 
 call :log INFO "Шаг 3: endpoint = %API_URL%"
 call :log INFO "Шаг 4: запуск POST запроса в GitLab..."
 
 if /I "%AUTH_MODE%"=="TRIGGER" (
-    curl %CURL_SSL_ARG% --progress-bar -o "%TMP_BODY%" -w "%%{http_code}" -X POST "%API_URL%" --form "token=%TRIGGER_TOKEN%" --form "ref=%REF%" %VAR_ARGS% >"%TMP_HTTP%"
+    curl %CURL_SSL_ARG% --progress-bar -o "%TMP_BODY%" -w "%%{http_code}" -X POST "%API_URL%" --header "Content-Type: application/json" --data "%JSON_PAYLOAD%" >"%TMP_HTTP%"
 ) else (
-    curl %CURL_SSL_ARG% --progress-bar -o "%TMP_BODY%" -w "%%{http_code}" -X POST "%API_URL%" --header "PRIVATE-TOKEN: %PRIVATE_TOKEN%" --form "ref=%REF%" %VAR_ARGS% >"%TMP_HTTP%"
+    curl %CURL_SSL_ARG% --progress-bar -o "%TMP_BODY%" -w "%%{http_code}" -X POST "%API_URL%" --header "PRIVATE-TOKEN: %PRIVATE_TOKEN%" --header "Content-Type: application/json" --data "%JSON_PAYLOAD%" >"%TMP_HTTP%"
 )
 set "CURL_EXIT=%ERRORLEVEL%"
 
@@ -123,16 +123,41 @@ call :log INFO "Pipeline успешно запущен."
 call :cleanup
 call :finish 0
 
-:build_var_args
+:build_json_payload
 setlocal EnableDelayedExpansion
+set "PAYLOAD={"
+if /I "%AUTH_MODE%"=="TRIGGER" (
+    call :json_escape "%TRIGGER_TOKEN%" _TOKEN_ESC
+    set "PAYLOAD=!PAYLOAD!\"token\":\"!_TOKEN_ESC!\","
+)
+call :json_escape "%REF%" _REF_ESC
+set "PAYLOAD=!PAYLOAD!\"ref\":\"!_REF_ESC!\""
+set "HAS_VAR=0"
 for /L %%I in (1,1,10) do (
     call set "_K=%%VAR%%I_KEY%%"
     call set "_V=%%VAR%%I_VALUE%%"
     if not "!_K!"=="" (
-        set "VAR_ARGS=!VAR_ARGS! --form "variables[!_K!]=!_V!""
+        if "!HAS_VAR!"=="0" (
+            set "PAYLOAD=!PAYLOAD!,\"variables\":{"
+            set "HAS_VAR=1"
+        )
+        call :json_escape "!_K!" _K_ESC
+        call :json_escape "!_V!" _V_ESC
+        if not "!PAYLOAD:~-1!"=="{" set "PAYLOAD=!PAYLOAD!,"
+        set "PAYLOAD=!PAYLOAD!\"!_K_ESC!\":\"!_V_ESC!\""
     )
 )
-endlocal & set "VAR_ARGS=%VAR_ARGS%"
+if "!HAS_VAR!"=="1" set "PAYLOAD=!PAYLOAD!}"
+set "PAYLOAD=!PAYLOAD!}"
+endlocal & set "JSON_PAYLOAD=%PAYLOAD%"
+goto :eof
+
+:json_escape
+setlocal EnableDelayedExpansion
+set "_S=%~1"
+set "_S=!_S:\=\\!"
+set "_S=!_S:"=\"!"
+endlocal & set "%~2=%_S%"
 goto :eof
 
 :load_cfg
