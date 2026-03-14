@@ -131,23 +131,20 @@ if /I "%AUTH_MODE%"=="TRIGGER" (
     set "PAYLOAD=!PAYLOAD!\"token\":\"!_TOKEN_ESC!\","
 )
 call :json_escape "%REF%" _REF_ESC
-set "PAYLOAD=!PAYLOAD!\"ref\":\"!_REF_ESC!\""
+set "PAYLOAD=!PAYLOAD!\"ref\":\"!_REF_ESC!\",\"variables\":["
 set "HAS_VAR=0"
 for /L %%I in (1,1,10) do (
     call set "_K=%%VAR%%I_KEY%%"
     call set "_V=%%VAR%%I_VALUE%%"
     if not "!_K!"=="" (
-        if "!HAS_VAR!"=="0" (
-            set "PAYLOAD=!PAYLOAD!,\"variables\":{"
-            set "HAS_VAR=1"
-        )
+        if "!HAS_VAR!"=="1" set "PAYLOAD=!PAYLOAD!,"
         call :json_escape "!_K!" _K_ESC
         call :json_escape "!_V!" _V_ESC
-        if not "!PAYLOAD:~-1!"=="{" set "PAYLOAD=!PAYLOAD!,"
-        set "PAYLOAD=!PAYLOAD!\"!_K_ESC!\":\"!_V_ESC!\""
+        set "PAYLOAD=!PAYLOAD!{\"key\":\"!_K_ESC!\",\"value\":\"!_V_ESC!\"}"
+        set "HAS_VAR=1"
     )
 )
-if "!HAS_VAR!"=="1" set "PAYLOAD=!PAYLOAD!}"
+set "PAYLOAD=!PAYLOAD!]"
 set "PAYLOAD=!PAYLOAD!}"
 endlocal & set "JSON_PAYLOAD=%PAYLOAD%"
 goto :eof
